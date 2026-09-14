@@ -17,6 +17,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<Notification> Notifications { get; set; } = null!;
     public DbSet<ProjectMember> ProjectMembers { get; set; } = null!;
     public DbSet<Announcement> Announcements { get; set; } = null!;
+    public DbSet<Document> Documents { get; set; } = null!;
+    public DbSet<DocumentShare> DocumentShares { get; set; } = null!;
+    public DbSet<AuditEvent> AuditEvents { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +62,39 @@ public class ApplicationDbContext : DbContext
 
         modelBuilder.Entity<Notification>()
             .HasIndex(n => new { n.UserId, n.IsRead });
+
+        modelBuilder.Entity<Document>()
+            .HasIndex(d => d.UploadedByUserId);
+
+        modelBuilder.Entity<Document>()
+            .HasIndex(d => d.ProjectId);
+
+        modelBuilder.Entity<Document>()
+            .HasIndex(d => d.Category);
+
+        modelBuilder.Entity<DocumentShare>()
+            .HasIndex(ds => new { ds.DocumentId, ds.UserId });
+
+        modelBuilder.Entity<DocumentShare>()
+            .HasOne(ds => ds.Document)
+            .WithMany(d => d.Shares)
+            .HasForeignKey(ds => ds.DocumentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DocumentShare>()
+            .HasOne(ds => ds.User)
+            .WithMany()
+            .HasForeignKey(ds => ds.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<DocumentShare>()
+            .HasOne(ds => ds.GrantedByUser)
+            .WithMany()
+            .HasForeignKey(ds => ds.GrantedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<AuditEvent>()
+            .HasIndex(a => a.ActionTimestampUtc);
 
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)

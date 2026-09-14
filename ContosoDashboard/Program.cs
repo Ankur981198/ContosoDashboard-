@@ -3,6 +3,8 @@ using ContosoDashboard.Data;
 using ContosoDashboard.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
+using System.Security.Claims;
+using System.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,6 +45,8 @@ builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<IProjectService, ProjectService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+builder.Services.AddScoped<IDocumentService, DocumentService>();
 
 // Add HttpContextAccessor for accessing user claims
 builder.Services.AddHttpContextAccessor();
@@ -56,12 +60,53 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
-        context.Database.EnsureCreated(); // For development - use migrations in production
+        var database = context.Database;
+        var recreateDevelopmentDatabase = app.Environment.IsDevelopment()
+            && builder.Configuration.GetValue<bool>("Database:RecreateOnSchemaMismatch");
+
+        if (!database.CanConnect())
+        {
+            database.EnsureCreated();
+        }
+        else if (recreateDevelopmentDatabase && !HasDocumentsTable(context))
+        {
+            database.EnsureDeleted();
+            database.EnsureCreated();
+        }
+        else
+        {
+            database.EnsureCreated();
+        }
     }
     catch (Exception ex)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "An error occurred creating the database.");
+    }
+}
+
+static bool HasDocumentsTable(ApplicationDbContext context)
+{
+    var connection = context.Database.GetDbConnection();
+    var wasClosed = connection.State == ConnectionState.Closed;
+
+    if (wasClosed)
+    {
+        connection.Open();
+    }
+
+    try
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = 'dbo' AND TABLE_NAME = 'Documents'";
+        return Convert.ToInt32(command.ExecuteScalar()) > 0;
+    }
+    finally
+    {
+        if (wasClosed)
+        {
+            connection.Close();
+        }
     }
 }
 
@@ -104,6 +149,79 @@ app.UseRouting();
 // Enable authentication and authorization
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapGet("/documents/download/{documentId:int}", async (int documentId, HttpContext context, IDocumentService documentService, IFileStorageService fileStorageService) =>
+{
+    if (context.User?.Identity?.IsAuthenticated != true)
+    {
+        return Results.Unauthorized();
+    }
+
+    var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(userIdClaim?.Value, out var requestingUserId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var document = await documentService.GetDocumentByIdAsync(documentId, requestingUserId);
+    if (document == null)
+    {
+        return Results.NotFound();
+    }
+
+    try
+    {
+        await using var stream = await fileStorageService.DownloadAsync(document.StoredFilePath);
+        return Results.File(stream, document.MimeType ?? "application/octet-stream", document.FileName, enableRangeProcessing: true);
+    }
+    catch (FileNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+
+app.MapGet("/documents/download", async (HttpContext context, ApplicationDbContext dbContext, IDocumentService documentService, IFileStorageService fileStorageService) =>
+{
+    if (context.User?.Identity?.IsAuthenticated != true)
+    {
+        return Results.Unauthorized();
+    }
+
+    var userIdClaim = context.User.FindFirst(ClaimTypes.NameIdentifier);
+    if (!int.TryParse(userIdClaim?.Value, out var requestingUserId))
+    {
+        return Results.Unauthorized();
+    }
+
+    var storedPath = context.Request.Query["path"].ToString();
+    if (string.IsNullOrWhiteSpace(storedPath))
+    {
+        return Results.BadRequest();
+    }
+
+    var document = await dbContext.Documents
+        .FirstOrDefaultAsync(d => d.StoredFilePath == storedPath && !d.IsDeleted);
+
+    if (document == null)
+    {
+        return Results.NotFound();
+    }
+
+    if (await documentService.GetDocumentByIdAsync(document.DocumentId, requestingUserId) == null)
+    {
+        return Results.Forbid();
+    }
+
+    try
+    {
+        await using var stream = await fileStorageService.DownloadAsync(document.StoredFilePath);
+        return Results.File(stream, document.MimeType ?? "application/octet-stream", document.FileName, enableRangeProcessing: true);
+    }
+    catch (FileNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
 
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");

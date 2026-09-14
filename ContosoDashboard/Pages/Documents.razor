@@ -1,0 +1,302 @@
+@page "/documents"
+@using ContosoDashboard.Services
+@using ContosoDashboard.Models
+@using Microsoft.AspNetCore.Authorization
+@using System.Security.Claims
+@attribute [Authorize]
+@inject IDocumentService DocumentService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
+
+<PageTitle>Documents - ContosoDashboard</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h1>Documents</h1>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="ShowUploadModal">
+                <i class="bi bi-upload"></i> Upload Document
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(statusMessage))
+    {
+        <div class="alert @(isError ? "alert-danger" : "alert-success")">@statusMessage</div>
+    }
+
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <label>Category</label>
+            <select class="form-select" @bind="selectedCategory">
+                <option value="">All</option>
+                <option value="Project Documents">Project Documents</option>
+                <option value="Team Resources">Team Resources</option>
+                <option value="Personal Files">Personal Files</option>
+                <option value="Reports">Reports</option>
+                <option value="Presentations">Presentations</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label>Search</label>
+            <input class="form-control" @bind="searchText" placeholder="Search documents" />
+        </div>
+        <div class="col-md-2">
+            <label>Sort</label>
+            <select class="form-select" @bind="sortBy">
+                <option value="date">Upload date</option>
+                <option value="title">Title</option>
+                <option value="category">Category</option>
+                <option value="filesize">File size</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label>&nbsp;</label>
+            <button class="btn btn-secondary d-block w-100" @onclick="ApplyFilters">Apply</button>
+        </div>
+    </div>
+
+    @if (documents == null)
+    {
+        <p><em>Loading...</em></p>
+    }
+    else if (!documents.Any())
+    {
+        <div class="alert alert-info">No documents available.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Category</th>
+                        <th>Uploaded</th>
+                        <th>Size</th>
+                        <th>Project</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var doc in documents)
+                    {
+                        <tr>
+                            <td>
+                                <strong>@doc.Title</strong>
+                                @if (!string.IsNullOrWhiteSpace(doc.Tags))
+                                {
+                                    <br />
+                                    <small class="text-muted">@doc.Tags</small>
+                                }
+                            </td>
+                            <td>@doc.Category</td>
+                            <td>@doc.UploadedDateUtc.ToLocalTime().ToString("MMM dd, yyyy")</td>
+                            <td>@FormatBytes(doc.FileSizeBytes)</td>
+                            <td>@(doc.ProjectName ?? "Personal")</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" @onclick="() => DownloadDocument(doc.DocumentId)">Download</button>
+                                    <button class="btn btn-outline-secondary" @onclick="() => DeleteDocument(doc.DocumentId)">Delete</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@if (showUpload)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Upload Document</h5>
+                    <button type="button" class="btn-close" @onclick="HideUploadModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <input class="form-control" @bind="newDocumentTitle" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" @bind="newDocumentDescription"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Category</label>
+                        <select class="form-select" @bind="newDocumentCategory">
+                            <option value="Project Documents">Project Documents</option>
+                            <option value="Team Resources">Team Resources</option>
+                            <option value="Personal Files">Personal Files</option>
+                            <option value="Reports">Reports</option>
+                            <option value="Presentations">Presentations</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Tags</label>
+                        <input class="form-control" @bind="newDocumentTags" placeholder="comma separated tags" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">File</label>
+                        <InputFile OnChange="HandleFileSelected" class="form-control" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="HideUploadModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="UploadDocument" disabled="@(selectedFile == null || string.IsNullOrWhiteSpace(newDocumentTitle))">Upload</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DocumentSummary>? documents;
+    private string selectedCategory = "";
+    private string searchText = "";
+    private string sortBy = "date";
+    private int currentUserId;
+    private bool showUpload;
+    private bool isError;
+    private string? statusMessage;
+    private IBrowserFile? selectedFile;
+    private string newDocumentTitle = "";
+    private string newDocumentDescription = "";
+    private string newDocumentCategory = "Project Documents";
+    private string newDocumentTags = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier);
+        if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int userId))
+        {
+            currentUserId = userId;
+        }
+
+        await LoadDocuments();
+    }
+
+    private async Task LoadDocuments()
+    {
+        documents = await DocumentService.GetAccessibleDocumentsAsync(currentUserId, new DocumentFilters
+        {
+            Category = string.IsNullOrWhiteSpace(selectedCategory) ? null : selectedCategory,
+            SearchText = string.IsNullOrWhiteSpace(searchText) ? null : searchText,
+            SortBy = sortBy
+        });
+    }
+
+    private async Task ApplyFilters()
+    {
+        await LoadDocuments();
+    }
+
+    private void ShowUploadModal()
+    {
+        showUpload = true;
+        statusMessage = null;
+    }
+
+    private void HideUploadModal()
+    {
+        showUpload = false;
+        selectedFile = null;
+        newDocumentTitle = string.Empty;
+        newDocumentDescription = string.Empty;
+        newDocumentCategory = "Project Documents";
+        newDocumentTags = string.Empty;
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+    }
+
+    private async Task UploadDocument()
+    {
+        if (selectedFile == null || string.IsNullOrWhiteSpace(newDocumentTitle))
+        {
+            isError = true;
+            statusMessage = "Please choose a file and enter a title before uploading.";
+            return;
+        }
+
+        try
+        {
+            await using var stream = selectedFile.OpenReadStream(25 * 1024 * 1024);
+            var request = new UploadDocumentRequest
+            {
+                Title = newDocumentTitle,
+                Description = newDocumentDescription,
+                Category = newDocumentCategory,
+                FileName = selectedFile.Name,
+                ContentType = selectedFile.ContentType,
+                Tags = newDocumentTags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()
+            };
+
+            await DocumentService.UploadDocumentAsync(currentUserId, null, null, request, stream);
+            isError = false;
+            statusMessage = "Document uploaded successfully.";
+            HideUploadModal();
+            await LoadDocuments();
+        }
+        catch (Exception ex)
+        {
+            isError = true;
+            statusMessage = ex.Message;
+        }
+    }
+
+    private async Task DownloadDocument(int documentId)
+    {
+        var document = await DocumentService.GetDocumentByIdAsync(documentId, currentUserId);
+        if (document == null)
+        {
+            isError = true;
+            statusMessage = "You do not have access to that document.";
+            return;
+        }
+
+        NavigationManager.NavigateTo($"/documents/download/{documentId}", forceLoad: true);
+    }
+
+    private async Task DeleteDocument(int documentId)
+    {
+        var deleted = await DocumentService.DeleteDocumentAsync(documentId, currentUserId);
+        if (!deleted)
+        {
+            isError = true;
+            statusMessage = "You are not allowed to delete this document.";
+            return;
+        }
+
+        isError = false;
+        statusMessage = "Document deleted.";
+        await LoadDocuments();
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        double len = bytes;
+        int order = 0;
+
+        while (len >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            len = len / 1024;
+        }
+
+        return string.Format("{0:0.##} {1}", len, sizes[order]);
+    }
+}
