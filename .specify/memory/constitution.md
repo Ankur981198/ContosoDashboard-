@@ -1,50 +1,42 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+Version change: 0.0.0 -> 1.0.0
+Modified principles: n/a (new constitution)
+Added sections: Training Constraints, Development Workflow
+Removed sections: none
+Follow-up TODOs: none
+-->
+
+# ContosoDashboard Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Security & Trust
+All user-facing features must be designed for the training context: authentication and authorization must be explicit, explainable, and observable. Access control must be enforced in both UI and service layers, and every protected route or data operation must verify the current user, role, and project membership before returning information or performing changes. This protects the sample app from unsafe access patterns and teaches the boundaries required in real systems without hiding them behind implicit trust.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Offline-First Architecture
+The project must remain runnable without cloud dependencies and must prefer local-first implementations that can later be swapped to managed services. Database, file, and identity dependencies must be isolated behind clear abstractions so the business logic stays portable and training examples remain reproducible in disconnected environments. This makes the codebase dependable for learning while leaving a clear path to production migration.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Test-First Delivery
+No behavioral change is complete until the relevant scenario is described in a failing test or equivalent executable verification, then implemented, and finally validated. The team must verify the behavior that changed, not merely the code that was edited, and must prefer small, focused checks that prove security, data isolation, and UI behavior. This keeps the training app honest and prevents regressions from being mistaken for progress.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Clear Separation of Concerns
+Models, services, data access, and UI concerns must remain distinct. Business rules must not be embedded in Razor or view logic, and cross-cutting concerns such as authorization, validation, and persistence must be centralized. This preserves readability, supports incremental learning, and makes future refactoring safe.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Reviewable, Maintainable Change
+Every change must be small, explainable, and easy to review. Names, comments, and structure must make intent obvious; complexity must be justified; and changes that affect security, contracts, or user-visible behavior require direct review before merge. The project is a teaching artifact, so clarity is a quality requirement equal to correctness.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Training Constraints
+The ContosoDashboard repository is intentionally a training-only implementation. It must not be treated as a production system, and any feature added to it must remain safe for learning, offline execution, and controlled experimentation. Mock authentication, local storage, and demo data are acceptable only when explicitly labeled as training patterns and kept isolated from real-world deployment assumptions. If a feature requires production-grade identity, persistence, or compliance controls, the implementation must document the gap and keep the training scope explicit.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
-
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
-
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+## Development Workflow
+All work must follow a small, traceable delivery loop: define the user-visible behavior, implement the minimal change, validate the relevant scenario, and document any training-specific limitations. Pull requests must inspect both the technical correctness and the teaching value of the change; security-sensitive updates must be reviewed with special attention to access control, data isolation, and configuration. The project must prefer reproducible setups and straightforward instructions over hidden assumptions or environment-specific shortcuts.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
+This constitution governs all repository decisions, including architecture, security, and process. It supersedes informal preferences and ad hoc exceptions when the two conflict. Any amendment must be documented in the repository history, tied to a clear rationale, and reviewed for impact on security, onboarding, and training fidelity before adoption.
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+Changes are versioned using semantic versioning: MAJOR for incompatible governance or principle changes, MINOR for new principles or materially expanded guidance, and PATCH for wording or clarification updates that do not change policy intent. The version line in this document must reflect the latest approved revision, and the ratification and amendment dates must remain current when governance changes are adopted.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+Compliance is reviewed by checking each change against the principle it affects, with special emphasis on authentication, authorization, offline execution, and clarity of design. When a rule is unclear or a gap is discovered, the team must resolve it in writing before continuing the work to avoid silent drift from the constitution.
+
+**Version**: 1.0.0 | **Ratified**: 2026-09-14 | **Last Amended**: 2026-09-14
